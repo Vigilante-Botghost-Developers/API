@@ -22,6 +22,9 @@ class Number(BaseModel):
     value: float
     decimal_places: Optional[int] = 2
 
+class UnformattedNumber(BaseModel):
+    value: str
+
 @app.get("/")
 def read_root():
     return {"message": "Welcome to the Test API"}
@@ -34,3 +37,9 @@ def echo_message(message: Message):
 def format_number(number: Number):
     formatted = "{:,.{precision}f}".format(number.value, precision=number.decimal_places)
     return {"formatted": formatted}
+
+@app.post("/unformat-number")
+def unformat_number(number: UnformattedNumber):
+    # Remove all non-numeric characters except decimal point
+    unformatted = ''.join(char for char in number.value if char.isdigit() or char == '.')
+    return {"unformatted": unformatted}
