@@ -30,8 +30,13 @@ def read_root():
     return {"message": "Welcome to the Test API"}
 
 @app.post("/echo")
-def echo_message(message: Message):
-    return {"echo": message.content}
+async def echo_message(message: Optional[Message] = None, params: dict = None):
+    response = {}
+    if message:
+        response["message"] = message.content
+    if params:
+        response["params"] = params
+    return response
 
 @app.post("/format-number")
 def format_number(number: Number):
