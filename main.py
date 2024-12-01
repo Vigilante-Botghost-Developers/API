@@ -24,7 +24,7 @@ class Number(BaseModel):
 
 class UnformattedNumber(BaseModel):
     value: str
-# w
+# testing commits
 @app.get("/")
 def read_root():
     return {"message": "Welcome to the Test API"}
