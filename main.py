@@ -24,7 +24,7 @@ class Number(BaseModel):
 
 class UnformattedNumber(BaseModel):
     value: str
-# skibidi  skibidi   skibidi  skibid  skibidi skibidi skibidi skibidi skibidi skibidi skibidi skibidi skibidi 
+# i pray to Tude, our lord 
 @app.get("/")
 def read_root():
     return {"message": "Welcome to the Test API"}
