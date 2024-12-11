@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Depends
+from fastapi import FastAPI, Depends, Request
 from pydantic import BaseModel, RootModel
 from typing import Optional
 import os
@@ -36,21 +36,27 @@ async def startup():
 
 async def get_rate_limit():
     """Dynamic rate limiting based on user flags"""
-    api_key = await get_api_key()
-    user_flags = await get_user_flags(api_key)
-    
-    if not user_flags:
+    try:
+        request = Request(scope={})  # Create empty request if none available
+        api_key = await get_api_key(request)
+        user_flags = await get_user_flags(api_key)
+        
+        if not user_flags:
+            return RateLimiter(times=RateLimits.UNAUTHENTICATED_LIMIT, minutes=1)
+        
+        # Get highest rate limit from user's flags
+        rate_limit = RateLimits.UNAUTHENTICATED_LIMIT
+        for flag in user_flags:
+            flag_limit = RateLimits.FLAG_LIMITS.get(flag, 0)
+            if flag_limit == -1:  # Unlimited for ADMINISTRATOR and SYSTEM_OPERATOR
+                return None
+            rate_limit = max(rate_limit, flag_limit)
+        
+        return RateLimiter(times=rate_limit, minutes=1)
+    except Exception as e:
+        print(f"Rate limit error: {e}")
+        # Default to most restrictive limit on error
         return RateLimiter(times=RateLimits.UNAUTHENTICATED_LIMIT, minutes=1)
-    
-    # Get highest rate limit from user's flags
-    rate_limit = RateLimits.UNAUTHENTICATED_LIMIT
-    for flag in user_flags:
-        flag_limit = RateLimits.FLAG_LIMITS.get(flag, 0)
-        if flag_limit == -1:  # Unlimited for ADMINISTRATOR and SYSTEM_OPERATOR
-            return None
-        rate_limit = max(rate_limit, flag_limit)
-    
-    return RateLimiter(times=rate_limit, minutes=1)
 
 class Message(BaseModel):
     content: str
