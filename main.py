@@ -1,5 +1,5 @@
 from fastapi import FastAPI
-from pydantic import BaseModel
+from pydantic import BaseModel, RootModel
 from typing import Optional
 from dotenv import load_dotenv
 import os
@@ -24,6 +24,10 @@ class Number(BaseModel):
 
 class UnformattedNumber(BaseModel):
     value: str
+
+class WebhookRequest(RootModel):
+    root: dict
+
 # i pray to Tude, our lord 
 @app.get("/")
 def read_root():
@@ -48,3 +52,27 @@ def unformat_number(number: UnformattedNumber):
     # Remove all non-numeric characters except decimal point
     unformatted = ''.join(char for char in number.value if char.isdigit() or char == '.')
     return {"unformatted": unformatted}
+
+@app.post("/webhook")
+async def webhook(request: WebhookRequest):
+    variables = []
+    
+    for var_name, value in request.root.items():
+        # Check if variable name is surrounded by curly brackets
+        if not (var_name.startswith("{") and var_name.endswith("}")):
+            return {"error": f"Variable name '{var_name}' must be surrounded by curly brackets"}
+        
+        # Strip the curly brackets to get the clean variable name
+        clean_var_name = var_name[1:-1]
+        
+        variable_obj = {
+            "name": clean_var_name,
+            "variable": var_name,
+            "value": value
+        }
+        variables.append(variable_obj)
+        
+        # Print the variable object to console
+        print(f"Processed variable: {variable_obj}")
+    
+    return {"variables": variables}
