@@ -25,7 +25,9 @@ firebase_admin.initialize_app(cred)
 db = firestore.client()
 
 # Initialize Redis with environment variables
-redis_url = os.environ.get("REDIS_URL", "redis://localhost:6379")
+redis_url = os.environ.get("REDIS_URL")
+if not redis_url:
+    raise ValueError("REDIS_URL environment variable is not set")
 
 try:
     redis_client = redis.from_url(
