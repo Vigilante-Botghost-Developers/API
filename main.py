@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Depends, Request
+from fastapi import FastAPI, Depends, Request, HTTPException
 from pydantic import BaseModel, RootModel
 from typing import Optional
 import os
@@ -120,8 +120,14 @@ async def webhook(request: Request, webhook_request: WebhookRequest, _=Depends(g
 @app.post("/create-test-users")
 async def create_test_users_endpoint():
     """Create test users with different flags and return their API keys."""
-    api_keys = await create_test_users()
-    return {
-        "message": "Test users created successfully",
-        "api_keys": api_keys
-    }
+    try:
+        api_keys = await create_test_users()
+        return {
+            "message": "Test users created successfully",
+            "api_keys": api_keys
+        }
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        print(f"Unexpected error in create_test_users_endpoint: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")

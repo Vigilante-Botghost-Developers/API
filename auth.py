@@ -4,7 +4,7 @@ from firebase_admin import credentials, firestore
 from fastapi import Request, HTTPException, Depends
 from functools import wraps
 import os
-from typing import List, Optional
+from typing import List, Optional, Dict
 import redis.asyncio as redis
 import json
 import secrets
@@ -57,26 +57,27 @@ class RateLimits:
 
 async def create_api_key(user_id: str, expires_in_days: int = 30) -> str:
     """Create a new API key for a user."""
-    import secrets
-    import time
-    
-    api_key = f"key_{secrets.token_urlsafe(32)}"
-    expires_at = int(time.time()) + (expires_in_days * 24 * 60 * 60)
-    
-    # Store API key in Redis with user_id and expiration
-    key_data = {
-        "user_id": user_id,
-        "created_at": int(time.time()),
-        "expires_at": expires_at
-    }
-    
-    await redis_client.set(
-        f"apikey:{api_key}",
-        json.dumps(key_data),
-        ex=expires_in_days * 24 * 60 * 60
-    )
-    
-    return api_key
+    try:
+        api_key = f"key_{secrets.token_urlsafe(32)}"
+        expires_at = int(time.time()) + (expires_in_days * 24 * 60 * 60)
+        
+        # Store API key in Redis with user_id and expiration
+        key_data = {
+            "user_id": user_id,
+            "created_at": int(time.time()),
+            "expires_at": expires_at
+        }
+        
+        await redis_client.set(
+            f"apikey:{api_key}",
+            json.dumps(key_data),
+            ex=expires_in_days * 24 * 60 * 60
+        )
+        
+        return api_key
+    except Exception as e:
+        print(f"Error creating API key: {e}")
+        raise HTTPException(status_code=500, detail="Failed to create API key")
 
 async def get_api_key(request: Request) -> Optional[str]:
     """Extract API key from request header."""
@@ -138,44 +139,55 @@ async def list_user_api_keys(user_id: str) -> List[dict]:
                 })
     return keys
 
-async def create_test_users():
+async def create_test_users() -> Dict[str, str]:
     """Create test users with different flags and API keys."""
-    test_users = [
-        {
-            "id": "test_user",
-            "flags": [UserFlag.USER],
-            "email": "test@example.com"
-        },
-        {
-            "id": "test_elevated",
-            "flags": [UserFlag.USER, UserFlag.ELEVATED_USER],
-            "email": "elevated@example.com"
-        },
-        {
-            "id": "test_admin",
-            "flags": [UserFlag.USER, UserFlag.ADMINISTRATOR],
-            "email": "admin@example.com"
-        },
-        {
-            "id": "test_sysop",
-            "flags": [UserFlag.USER, UserFlag.SYSTEM_OPERATOR],
-            "email": "sysop@example.com"
-        }
-    ]
-    
-    api_keys = {}
-    for user in test_users:
-        # Create or update user in Firestore
-        db.collection('users').document(user['id']).set({
-            'email': user['email'],
-            'flags': [flag.value for flag in user['flags']]
-        })
+    try:
+        test_users = [
+            {
+                "id": "test_user",
+                "flags": [UserFlag.USER],
+                "email": "test@example.com"
+            },
+            {
+                "id": "test_elevated",
+                "flags": [UserFlag.USER, UserFlag.ELEVATED_USER],
+                "email": "elevated@example.com"
+            },
+            {
+                "id": "test_admin",
+                "flags": [UserFlag.USER, UserFlag.ADMINISTRATOR],
+                "email": "admin@example.com"
+            },
+            {
+                "id": "test_sysop",
+                "flags": [UserFlag.USER, UserFlag.SYSTEM_OPERATOR],
+                "email": "sysop@example.com"
+            }
+        ]
         
-        # Create API key
-        api_key = await create_api_key(user['id'], expires_in_days=365)
-        api_keys[user['id']] = api_key
+        api_keys = {}
+        for user in test_users:
+            try:
+                # Create or update user in Firestore
+                db.collection('users').document(user['id']).set({
+                    'email': user['email'],
+                    'flags': [flag.value for flag in user['flags']]
+                })
+                
+                # Create API key
+                api_key = await create_api_key(user['id'], expires_in_days=365)
+                api_keys[user['id']] = api_key
+            except Exception as e:
+                print(f"Error creating user {user['id']}: {e}")
+                continue
         
-    return api_keys
+        if not api_keys:
+            raise HTTPException(status_code=500, detail="Failed to create any test users")
+            
+        return api_keys
+    except Exception as e:
+        print(f"Error in create_test_users: {e}")
+        raise HTTPException(status_code=500, detail="Failed to create test users")
 
 def requires_flags(required_flags: List[UserFlag], any_of: bool = False):
     """Decorator to require specific user flags."""
