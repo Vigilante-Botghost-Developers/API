@@ -34,8 +34,11 @@ try:
         redis_url,
         encoding="utf-8",
         decode_responses=True,
-        socket_connect_timeout=10
+        socket_connect_timeout=5,  # Reduce timeout
+        socket_keepalive=True      # Keep connection alive
     )
+    # Test the connection
+    redis_client.ping()
 except Exception as e:
     print(f"Failed to initialize Redis client: {e}")
     raise
@@ -142,52 +145,26 @@ async def list_user_api_keys(user_id: str) -> List[dict]:
 async def create_test_users() -> Dict[str, str]:
     """Create test users with different flags and API keys."""
     try:
-        test_users = [
-            {
-                "id": "test_user",
-                "flags": [UserFlag.USER],
-                "email": "test@example.com"
-            },
-            {
-                "id": "test_elevated",
-                "flags": [UserFlag.USER, UserFlag.ELEVATED_USER],
-                "email": "elevated@example.com"
-            },
-            {
-                "id": "test_admin",
-                "flags": [UserFlag.USER, UserFlag.ADMINISTRATOR],
-                "email": "admin@example.com"
-            },
-            {
-                "id": "test_sysop",
-                "flags": [UserFlag.USER, UserFlag.SYSTEM_OPERATOR],
-                "email": "sysop@example.com"
-            }
-        ]
+        # Start with just one test user
+        test_user = {
+            "id": "test_admin",
+            "flags": [UserFlag.USER, UserFlag.ADMINISTRATOR],
+            "email": "admin@example.com"
+        }
         
-        api_keys = {}
-        for user in test_users:
-            try:
-                # Create or update user in Firestore
-                db.collection('users').document(user['id']).set({
-                    'email': user['email'],
-                    'flags': [flag.value for flag in user['flags']]
-                })
-                
-                # Create API key
-                api_key = await create_api_key(user['id'], expires_in_days=365)
-                api_keys[user['id']] = api_key
-            except Exception as e:
-                print(f"Error creating user {user['id']}: {e}")
-                continue
+        # Create or update user in Firestore
+        db.collection('users').document(test_user['id']).set({
+            'email': test_user['email'],
+            'flags': [flag.value for flag in test_user['flags']]
+        })
         
-        if not api_keys:
-            raise HTTPException(status_code=500, detail="Failed to create any test users")
-            
-        return api_keys
+        # Create API key
+        api_key = await create_api_key(test_user['id'], expires_in_days=365)
+        
+        return {test_user['id']: api_key}
     except Exception as e:
         print(f"Error in create_test_users: {e}")
-        raise HTTPException(status_code=500, detail="Failed to create test users")
+        raise HTTPException(status_code=500, detail=str(e))
 
 def requires_flags(required_flags: List[UserFlag], any_of: bool = False):
     """Decorator to require specific user flags."""

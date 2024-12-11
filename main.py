@@ -27,11 +27,13 @@ async def startup():
             redis_url,
             encoding="utf-8",
             decode_responses=True,
-            socket_connect_timeout=10
+            socket_connect_timeout=5,  # Reduce timeout
+            socket_keepalive=True      # Keep connection alive
         )
         # Test the connection
         await redis_instance.ping()
         await FastAPILimiter.init(redis_instance)
+        print("Successfully connected to Redis")
     except Exception as e:
         print(f"Failed to connect to Redis: {e}")
         raise
