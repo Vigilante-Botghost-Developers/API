@@ -1,7 +1,11 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Depends
 from pydantic import BaseModel, RootModel
 from typing import Optional
 import os
+from fastapi_limiter import FastAPILimiter
+from fastapi_limiter.depends import RateLimiter
+from auth import UserFlag, get_user_flags, get_api_key, RateLimits
+import redis.asyncio as redis
 
 app = FastAPI(
     title="Test API",
@@ -10,6 +14,34 @@ app = FastAPI(
     redoc_url=None,   # Disable ReDoc
     openapi_url=None  # Disable OpenAPI schema
 )
+
+# Initialize rate limiter on startup
+@app.on_event("startup")
+async def startup():
+    redis_instance = redis.from_url(
+        os.environ.get("REDIS_URL", "redis://localhost:6379"),
+        encoding="utf-8",
+        decode_responses=True
+    )
+    await FastAPILimiter.init(redis_instance)
+
+async def get_rate_limit():
+    """Dynamic rate limiting based on user flags"""
+    api_key = await get_api_key()
+    user_flags = await get_user_flags(api_key)
+    
+    if not user_flags:
+        return RateLimiter(times=RateLimits.UNAUTHENTICATED_LIMIT, minutes=1)
+    
+    # Get highest rate limit from user's flags
+    rate_limit = RateLimits.UNAUTHENTICATED_LIMIT
+    for flag in user_flags:
+        flag_limit = RateLimits.FLAG_LIMITS.get(flag, 0)
+        if flag_limit == -1:  # Unlimited for ADMINISTRATOR and SYSTEM_OPERATOR
+            return None
+        rate_limit = max(rate_limit, flag_limit)
+    
+    return RateLimiter(times=rate_limit, minutes=1)
 
 class Message(BaseModel):
     content: str
@@ -25,11 +57,11 @@ class WebhookRequest(RootModel):
     root: dict
 
 # i pray to Tude, our lord 
-@app.get("/")
+@app.get("/", dependencies=[Depends(get_rate_limit)])
 def read_root():
     return {"message": "Welcome to the Test API"}
 
-@app.post("/echo")
+@app.post("/echo", dependencies=[Depends(get_rate_limit)])
 async def echo_message(message: Optional[Message] = None, params: dict = None):
     response = {}
     if message:
@@ -38,18 +70,18 @@ async def echo_message(message: Optional[Message] = None, params: dict = None):
         response["params"] = params
     return response
 
-@app.post("/format-number")
+@app.post("/format-number", dependencies=[Depends(get_rate_limit)])
 def format_number(number: Number):
     formatted = "{:,.{precision}f}".format(number.value, precision=number.decimal_places)
     return {"formatted": formatted}
 
-@app.post("/unformat-number")
+@app.post("/unformat-number", dependencies=[Depends(get_rate_limit)])
 def unformat_number(number: UnformattedNumber):
     # Remove all non-numeric characters except decimal point
     unformatted = ''.join(char for char in number.value if char.isdigit() or char == '.')
     return {"unformatted": unformatted}
 
-@app.post("/webhook")
+@app.post("/webhook", dependencies=[Depends(get_rate_limit)])
 async def webhook(request: WebhookRequest):
     variables = []
     
