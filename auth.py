@@ -25,7 +25,7 @@ firebase_admin.initialize_app(cred)
 db = firestore.client()
 
 # Initialize Redis with environment variables
-redis_url = f"redis://default:QFwgvvKladQiQsrsjYLtvTYLlmzPxyqS@redis.railway.internal:6379"
+redis_url = os.environ.get("REDIS_URL", "redis://localhost:6379")
 
 try:
     redis_client = redis.from_url(
@@ -76,10 +76,29 @@ async def create_api_key(user_id: str, expires_in_days: int = 30) -> str:
     
     return api_key
 
-async def get_api_key(request: Request) -> str:
+async def get_api_key(request: Request) -> Optional[str]:
     """Extract API key from request header."""
     api_key = request.headers.get("X-API-Key")
+    if not api_key:
+        return None
     return api_key
+
+async def get_user_flags(api_key: Optional[str] = None) -> List[UserFlag]:
+    """Get user flags based on API key."""
+    if not api_key:
+        return []
+        
+    user_id = await validate_api_key(api_key)
+    if not user_id:
+        return []
+    
+    # Get user flags from Firestore
+    user_doc = db.collection('users').document(user_id).get()
+    if not user_doc.exists:
+        return []
+        
+    user_data = user_doc.to_dict()
+    return [UserFlag(flag) for flag in user_data.get('flags', [])]
 
 async def validate_api_key(api_key: str) -> Optional[str]:
     """Validate API key and return user_id if valid."""
@@ -99,20 +118,6 @@ async def validate_api_key(api_key: str) -> Optional[str]:
         
     return key_data["user_id"]
 
-async def get_user_flags(api_key: str = Depends(get_api_key)) -> List[UserFlag]:
-    """Get user flags based on API key."""
-    user_id = await validate_api_key(api_key)
-    if not user_id:
-        return []
-    
-    # Get user flags from Firestore
-    user_doc = db.collection('users').document(user_id).get()
-    if not user_doc.exists:
-        return []
-        
-    user_data = user_doc.to_dict()
-    return [UserFlag(flag) for flag in user_data.get('flags', [])]
-
 async def revoke_api_key(api_key: str):
     """Revoke an API key."""
     await redis_client.delete(f"apikey:{api_key}")
@@ -130,6 +135,45 @@ async def list_user_api_keys(user_id: str) -> List[dict]:
                     **key_data
                 })
     return keys
+
+async def create_test_users():
+    """Create test users with different flags and API keys."""
+    test_users = [
+        {
+            "id": "test_user",
+            "flags": [UserFlag.USER],
+            "email": "test@example.com"
+        },
+        {
+            "id": "test_elevated",
+            "flags": [UserFlag.USER, UserFlag.ELEVATED_USER],
+            "email": "elevated@example.com"
+        },
+        {
+            "id": "test_admin",
+            "flags": [UserFlag.USER, UserFlag.ADMINISTRATOR],
+            "email": "admin@example.com"
+        },
+        {
+            "id": "test_sysop",
+            "flags": [UserFlag.USER, UserFlag.SYSTEM_OPERATOR],
+            "email": "sysop@example.com"
+        }
+    ]
+    
+    api_keys = {}
+    for user in test_users:
+        # Create or update user in Firestore
+        db.collection('users').document(user['id']).set({
+            'email': user['email'],
+            'flags': [flag.value for flag in user['flags']]
+        })
+        
+        # Create API key
+        api_key = await create_api_key(user['id'], expires_in_days=365)
+        api_keys[user['id']] = api_key
+        
+    return api_keys
 
 def requires_flags(required_flags: List[UserFlag], any_of: bool = False):
     """Decorator to require specific user flags."""
