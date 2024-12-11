@@ -18,12 +18,23 @@ app = FastAPI(
 # Initialize rate limiter on startup
 @app.on_event("startup")
 async def startup():
-    redis_instance = redis.from_url(
-        os.environ.get("REDIS_URL", "redis://localhost:6379"),
-        encoding="utf-8",
-        decode_responses=True
-    )
-    await FastAPILimiter.init(redis_instance)
+    redis_url = os.environ.get("REDIS_URL")
+    if not redis_url:
+        raise ValueError("REDIS_URL environment variable is required")
+    
+    try:
+        redis_instance = redis.from_url(
+            redis_url,
+            encoding="utf-8",
+            decode_responses=True,
+            socket_connect_timeout=10
+        )
+        # Test the connection
+        await redis_instance.ping()
+        await FastAPILimiter.init(redis_instance)
+    except Exception as e:
+        print(f"Failed to connect to Redis: {e}")
+        raise
 
 async def get_rate_limit():
     """Dynamic rate limiting based on user flags"""
