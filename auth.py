@@ -10,18 +10,20 @@ import json
 import secrets
 import time
 
-# Initialize Firebase Admin
+# Initialize Firebase Admin with environment variables
 cred = credentials.Certificate({
     "type": "service_account",
-    "project_id": os.getenv("FIREBASE_PROJECT_ID"),
-    "private_key": os.getenv("FIREBASE_PRIVATE_KEY").replace("\\n", "\n"),
-    "client_email": os.getenv("FIREBASE_CLIENT_EMAIL"),
+    "project_id": os.environ.get("FIREBASE_PROJECT_ID"),
+    "private_key": os.environ.get("FIREBASE_PRIVATE_KEY", "").replace("\\n", "\n"),
+    "client_email": os.environ.get("FIREBASE_CLIENT_EMAIL")
 })
 firebase_admin.initialize_app(cred)
 db = firestore.client()
 
-# Initialize Redis
-redis_client = redis.from_url(os.getenv("REDIS_URL"), encoding="utf-8", decode_responses=True)
+# Initialize Redis with environment variables
+redis_client = redis.from_url(os.environ.get("REDIS_URL", "redis://localhost:6379"), 
+                            encoding="utf-8", 
+                            decode_responses=True)
 
 class UserFlag(str, Enum):
     USER = "USER"

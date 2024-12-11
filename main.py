@@ -1,18 +1,14 @@
 from fastapi import FastAPI
 from pydantic import BaseModel, RootModel
 from typing import Optional
-from dotenv import load_dotenv
 import os
-
-# Load environment variables
-load_dotenv()
 
 app = FastAPI(
     title="Test API",
     description="A simple test API with basic endpoints",
     docs_url=None,    # Disable Swagger UI
     redoc_url=None,   # Disable ReDoc
-    openapi_url=os.getenv("OPENAPI_URL")  # Disable OpenAPI schema
+    openapi_url=None  # Disable OpenAPI schema
 )
 
 class Message(BaseModel):
